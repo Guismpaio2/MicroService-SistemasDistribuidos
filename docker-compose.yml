@@ -1,0 +1,69 @@
+# Orquestra todo o laboratório com um único comando:
+#
+#   docker compose up --build
+#
+# Apenas o gateway (API) e o frontend ficam acessíveis pelo seu computador.
+# Os serviços internos (produtos e pedidos) só existem dentro da rede do Docker:
+# é exatamente a ideia de um API Gateway como ÚNICA porta de entrada.
+#
+# Se alguma porta já estiver ocupada na sua máquina, mude-a sem editar este arquivo:
+#
+#   GATEWAY_PORT=4000 FRONTEND_PORT=4173 docker compose up --build
+#
+# Para depurar um serviço interno direto do seu computador, descomente o bloco
+# "ports" do serviço desejado.
+
+services:
+  produtos-service:
+    build: ./backend/produtos-service
+    environment:
+      PORT: 3001
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # ports:
+    #   - "3001:3001"
+
+  pedidos-service:
+    build: ./backend/pedidos-service
+    environment:
+      PORT: 3002
+      # Dentro da rede do Docker, os serviços se enxergam pelo NOME do serviço (DNS interno).
+      PRODUTOS_SERVICE_URL: http://produtos-service:3001
+    depends_on:
+      produtos-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # ports:
+    #   - "3002:3002"
+
+  api-gateway:
+    build: ./backend/api-gateway
+    environment:
+      PORT: 3000
+      PRODUTOS_SERVICE_URL: http://produtos-service:3001
+      PEDIDOS_SERVICE_URL: http://pedidos-service:3002
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}
+    depends_on:
+      produtos-service:
+        condition: service_healthy
+      pedidos-service:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:-3000}:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:${GATEWAY_PORT:-3000}/api
+    depends_on:
+      - api-gateway
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
