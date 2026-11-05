@@ -1,0 +1,9 @@
+# Este repositório guarda apenas a ORQUESTRAÇÃO do laboratório
+# (readme, docker-compose, scripts de inicialização).
+# backend/ e frontend/ são repositórios Git independentes.
+backend/
+frontend/
+
+.DS_Store
+.env
+*.log
